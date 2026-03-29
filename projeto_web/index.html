@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DevTrack – Sprint Manager</title>
+  <link rel="stylesheet" href="./assets/css/style.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       LOGIN
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div id="view-login" class="login-container active">
+    <div class="login-box">
+      <div class="login-header">
+        <div class="login-icon">⚡</div>
+        <h1>DevTrack</h1>
+        <p>Sprint Manager</p>
+      </div>
+      <form id="login-form" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label class="form-label">Usuário</label>
+          <input type="text" id="login-user" placeholder="Digite seu usuário" required autofocus />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Senha</label>
+          <input type="password" id="login-pass" placeholder="Digite sua senha" required />
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%">Entrar</button>
+        <div id="login-error" style="display:none;color:var(--red);text-align:center;margin-top:12px;font-size:13px"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       TOPBAR
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div id="topbar" style="display:none">
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <div class="logo-text">
+        <p>DevTrack</p>
+        <p>Sprint Manager</p>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <button class="nav-btn" data-view="homepage">🏠 Homepage</button>
+    <button class="nav-btn" data-view="dashboard">📊 Dashboard</button>
+    <button class="nav-btn active" data-view="kanban">🗂 Kanban</button>
+    <button class="nav-btn" data-view="backlog">📋 Backlog</button>
+    <button class="nav-btn" data-view="integrations" id="nav-integ">🔗 Integrações</button>
+    <button class="nav-btn" data-view="users">👤 Usuários</button>
+    <div class="spacer"></div>
+    <button id="btn-new" class="btn btn-primary">✚ Nova Tarefa</button>
+    <button id="btn-new-release" class="btn btn-secondary">✚ Nova Release</button>
+    <button id="btn-logout" class="btn btn-secondary" style="background:rgba(239,68,68,0.1);color:var(--red);border-color:rgba(239,68,68,0.4)">
+      🚪 Sair
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       FILTER BAR
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div id="filterbar" style="display:none">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search" placeholder="Buscar por ID, descrição ou cliente..." />
+    </div>
+    <select id="f-status"><option value="">Todos os status</option></select>
+    <select id="f-dev"><option value="">Todos os devs</option></select>
+    <select id="f-release"><option value="">Todas as releases</option></select>
+    <select id="f-tipo"><option value="">Todos os tipos</option></select>
+    <span class="filter-count" id="filter-count"></span>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       CONTENT
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div id="content" style="display:none">
+
+    <!-- HOMEPAGE ─────────────────────────────────────────────────────── -->
+    <div class="view" id="view-homepage">
+      <div id="homepage-content">
+        <div class="homepage-header">
+          <h2 id="homepage-title">Bem-vindo!</h2>
+          <p id="homepage-subtitle">Aqui estão suas atividades e resumo</p>
+        </div>
+        <div class="kpi-grid" id="homepage-kpi-grid"></div>
+        <div class="two-col">
+          <div class="panel">
+            <div class="panel-title">Minhas Tarefas por Status</div>
+            <div id="homepage-status-bars"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">Horas Estimadas</div>
+            <div id="homepage-hours-summary"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title" id="homepage-tasks-list-title">Lista de Tarefas</div>
+          <div id="homepage-tasks-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD ────────────────────────────────────────────────────── -->
+    <div class="view" id="view-dashboard">
+      <div id="dashboard-content">
+        <div class="kpi-grid" id="kpi-grid"></div>
+        <div class="two-col">
+          <div class="panel">
+            <div class="panel-title">Por Status</div>
+            <div id="status-bars"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">Por Release</div>
+            <div id="release-bars"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Alocação por Desenvolvedor</div>
+          <div class="dev-grid" id="dev-cards"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KANBAN ───────────────────────────────────────────────────────── -->
+    <div class="view active" id="view-kanban">
+      <div id="kanban-board"></div>
+    </div>
+
+    <!-- BACKLOG ──────────────────────────────────────────────────────── -->
+    <div class="view" id="view-backlog">
+      <div id="backlog-wrap">
+        <table id="backlog-table">
+          <thead>
+            <tr>
+              <th data-col="id">ID</th>
+              <th data-col="tipo">Tipo</th>
+              <th data-col="prioridade">Prior.</th>
+              <th data-col="status">Status</th>
+              <th data-col="dev">Dev</th>
+              <th data-col="release">Release</th>
+              <th data-col="cliente">Cliente</th>
+              <th data-col="horasDev">H.Dev</th>
+              <th data-col="horasQa">H.QA</th>
+              <th>Origem</th>
+              <th>Descrição</th>
+            </tr>
+          </thead>
+          <tbody id="backlog-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- INTEGRAÇÕES ──────────────────────────────────────────────────── -->
+    <div class="view" id="view-integrations">
+      <div id="integrations-content">
+
+        <div class="integ-header">
+          <div>
+            <p style="font-size:18px;font-weight:800;margin-bottom:4px">🔗 Central de Integrações</p>
+            <p style="font-size:13px;color:var(--muted)">Importe tickets da ferramenta de produto direto no seu backlog</p>
+          </div>
+          <div class="integ-kpis">
+            <div class="integ-kpi"><div class="val" id="cnt-manual" style="color:var(--slate)">0</div><div class="lbl">Manual</div></div>
+            <div class="integ-kpi"><div class="val" id="cnt-csv"    style="color:var(--yellow)">0</div><div class="lbl">Via CSV</div></div>
+            <div class="integ-kpi"><div class="val" id="cnt-api"    style="color:var(--green)">0</div><div class="lbl">Via API</div></div>
+          </div>
+        </div>
+
+        <div class="tab-bar">
+          <button class="tab-btn active" data-tab="tab-csv">📄 Importar CSV</button>
+          <button class="tab-btn" data-tab="tab-api">🔌 Integração API</button>
+          <button class="tab-btn" data-tab="tab-log">📋 Histórico</button>
+          <button class="tab-btn" data-tab="tab-guide">📖 Como funciona</button>
+        </div>
+
+        <!-- TAB CSV -->
+        <div class="tab-content active" id="tab-csv">
+          <div class="panel" style="margin-bottom:16px">
+            <p style="font-size:16px;font-weight:700;margin-bottom:4px">Importar arquivo CSV / TXT</p>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:20px">
+              Exporte os tickets da ferramenta do time de produto e importe aqui.
+            </p>
+            <div class="drop-zone" id="drop-zone" onclick="document.getElementById('csv-file').click()">
+              <div class="drop-icon">📂</div>
+              <div class="drop-title">Clique para selecionar o arquivo</div>
+              <div class="drop-sub">Formatos: .csv, .txt — separadores: vírgula, ponto-e-vírgula, pipe (|) ou tab</div>
+            </div>
+            <input type="file" id="csv-file" accept=".csv,.txt,.tsv" style="display:none" />
+            <div id="csv-alert" style="display:none"></div>
+          </div>
+
+          <div id="csv-preview-section" style="display:none" class="panel">
+            <p style="font-size:16px;font-weight:700;margin-bottom:4px">
+              Prévia — <span id="preview-count">0</span> ticket(s)
+            </p>
+            <div id="preview-wrap">
+              <table id="preview-table">
+                <thead>
+                  <tr>
+                    <th>ID Ticket</th>
+                    <th>Tipo</th>
+                    <th>Status</th>
+                    <th>Cliente</th>
+                    <th>Descrição</th>
+                    <th>Dev</th>
+                  </tr>
+                </thead>
+                <tbody id="preview-body"></tbody>
+              </table>
+            </div>
+            <div class="preview-actions">
+              <button class="btn btn-secondary" onclick="cancelPreview()">Cancelar</button>
+              <button class="btn btn-success" id="confirm-import">
+                ✓ Importar <span id="new-count">0</span> novo(s)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB API -->
+        <div class="tab-content" id="tab-api">
+          <div class="panel" style="margin-bottom:16px">
+            <p style="font-size:16px;font-weight:700;margin-bottom:16px">Configuração da API</p>
+            <div class="api-form-grid">
+              <div class="full">
+                <label class="form-label">URL Base da API</label>
+                <input type="text" id="api-url" placeholder="https://suaempresa.tiflux.com/api/v1" style="width:100%" />
+              </div>
+              <div>
+                <label class="form-label">API Key / Token</label>
+                <input type="text" id="api-key" placeholder="sk-..." />
+              </div>
+              <div>
+                <label class="form-label">Intervalo de polling (min)</label>
+                <input type="number" id="poll-interval" value="15" min="1" />
+              </div>
+            </div>
+            <div class="api-btns">
+              <button class="btn btn-primary" id="btn-test-api">🔌 Testar Conexão</button>
+              <button class="btn" id="btn-sync" style="background:var(--surface);border:1px solid var(--border);color:var(--muted)">
+                🔄 Sincronizar Agora
+              </button>
+              <div class="toggle-wrap" onclick="togglePolling()">
+                <div class="toggle" id="polling-toggle"><div class="toggle-knob"></div></div>
+                <span id="polling-label">Polling automático (desativado)</span>
+              </div>
+            </div>
+            <div id="api-alert" style="display:none"></div>
+          </div>
+        </div>
+
+        <!-- TAB LOG -->
+        <div class="tab-content" id="tab-log">
+          <div class="panel">
+            <p style="font-size:16px;font-weight:700;margin-bottom:16px">Histórico de Importações</p>
+            <div id="import-log">
+              <p style="color:var(--muted);font-size:13px;text-align:center;padding:30px 0">
+                Nenhuma importação realizada ainda.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB GUIDE -->
+        <div class="tab-content" id="tab-guide">
+          <div class="panel">
+            <p style="font-size:16px;font-weight:700;margin-bottom:16px">Como funciona</p>
+            <div class="guide-item">
+              <div class="guide-header">
+                <span style="font-size:24px">📄</span>
+                <span class="guide-title">Importação CSV</span>
+              </div>
+              <ol>
+                <li>Exporte os tickets da sua ferramenta de produto como CSV ou TXT</li>
+                <li>Clique na área de upload ou arraste o arquivo</li>
+                <li>O sistema mapeia as colunas automaticamente (fuzzy matching)</li>
+                <li>Revise a prévia — duplicatas são destacadas em amarelo</li>
+                <li>Confirme a importação — apenas registros novos são adicionados</li>
+              </ol>
+            </div>
+            <div class="guide-item">
+              <div class="guide-header">
+                <span style="font-size:24px">🔌</span>
+                <span class="guide-title">Integração API</span>
+              </div>
+              <ol>
+                <li>Informe a URL base da sua API de tickets e a chave de autenticação</li>
+                <li>Clique em "Testar Conexão" para validar as credenciais</li>
+                <li>Use "Sincronizar Agora" para importar os tickets mais recentes</li>
+                <li>Ative o polling automático para sincronização periódica</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- USUÁRIOS ─────────────────────────────────────────────────────── -->
+    <div class="view" id="view-users">
+      <div class="panel" style="margin:18px">
+        <div class="panel-title">Gestão de Usuários</div>
+        <button id="btn-new-user" class="btn btn-primary" style="margin-bottom:16px">✚ Novo Usuário</button>
+        <div style="overflow-x:auto">
+          <table id="users-table">
+            <thead>
+              <tr>
+                <th>Login</th>
+                <th>Nome</th>
+                <th>Role</th>
+                <th>Horas</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="user-list-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       MODAL
+       ═══════════════════════════════════════════════════════════════════ -->
+  <div id="modal-overlay">
+    <div id="modal">
+
+      <!-- Header do modal -->
+      <div class="modal-header">
+        <div class="modal-header-left">
+          <span class="badge-id" id="modal-id"></span>
+          <span id="modal-tipo-badge"></span>
+          <span id="modal-origem-badge"></span>
+        </div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+
+      <!-- Body do modal -->
+      <div class="modal-body">
+
+        <!-- Seção: Tarefa -->
+        <div id="modal-task-content" class="modal-section active">
+          <div class="modal-left">
+            <div class="form-group">
+              <label class="form-label">Descrição</label>
+              <textarea id="m-desc" rows="4" style="width:100%;resize:vertical"></textarea>
+            </div>
+            <div class="form-row" style="margin-bottom:14px">
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Cliente</label>
+                <input type="text" id="m-cliente" />
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Demandante</label>
+                <input type="text" id="m-demandante" />
+              </div>
+            </div>
+            <div class="form-row" style="margin-bottom:14px">
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Ticket Orçamento</label>
+                <input type="text" id="m-ticket" />
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Data Registro</label>
+                <input type="text" id="m-data" placeholder="dd/mm/aaaa" />
+              </div>
+            </div>
+            <div class="panel" style="margin-bottom:0">
+              <div class="form-label" style="margin-bottom:12px">Estimativa de Horas</div>
+              <div class="hours-grid">
+                <div class="hours-box">
+                  <input type="number" class="hours-input" id="m-hdev" style="color:var(--accent)" min="0" oninput="updateTotal()" />
+                  <p>Horas DEV</p>
+                </div>
+                <div class="hours-box">
+                  <input type="number" class="hours-input" id="m-hqa" style="color:var(--yellow)" min="0" oninput="updateTotal()" />
+                  <p>Horas QA</p>
+                </div>
+                <div class="hours-box">
+                  <div class="hours-total" id="m-htotal">0</div>
+                  <p style="font-size:11px;color:var(--muted);margin-top:4px">Total</p>
+                </div>
+              </div>
+            </div>
+          </div><!-- /modal-left -->
+
+          <div class="modal-right">
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select id="m-status" style="width:100%"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Desenvolvedor</label>
+              <select id="m-dev" style="width:100%"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Release</label>
+              <select id="m-release" style="width:100%"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Prioridade</label>
+              <select id="m-prio" style="width:100%"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tipo</label>
+              <select id="m-tipo" style="width:100%"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Classificação</label>
+              <select id="m-classif" style="width:100%"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Módulo</label>
+              <select id="m-modulo" style="width:100%"></select>
+            </div>
+          </div><!-- /modal-right -->
+        </div><!-- /modal-task-content -->
+
+        <!-- Seção: Release -->
+        <div id="modal-release-content" class="modal-section" style="display:none">
+          <div style="width:100%">
+            <div class="form-group">
+              <label class="form-label">ID da Release</label>
+              <input type="text" id="r-id" placeholder="ex: 7.18.0" style="width:100%" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Produto</label>
+              <select id="r-produto" style="width:100%">
+                <option value="Enterprise">Enterprise</option>
+                <option value="CLM">CLM</option>
+                <option value="ElawOn">ElawOn</option>
+              </select>
+            </div>
+            <div class="form-row" style="gap:10px">
+              <div class="form-group" style="flex:1">
+                <label class="form-label">Data Início</label>
+                <input type="date" id="r-inicio" style="width:100%" />
+              </div>
+              <div class="form-group" style="flex:1">
+                <label class="form-label">Data Fim</label>
+                <input type="date" id="r-fim" style="width:100%" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select id="r-status" style="width:100%">
+                <option value="Planejado">Planejado</option>
+                <option value="Em Andamento">Em Andamento</option>
+                <option value="Concluído">Concluído</option>
+              </select>
+            </div>
+          </div>
+        </div><!-- /modal-release-content -->
+
+        <!-- Seção: Usuário -->
+        <div id="modal-user-content" class="modal-section" style="display:none">
+          <div style="width:100%">
+            <div class="form-group">
+              <label class="form-label">Login</label>
+              <input type="text" id="u-username" style="width:100%" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nome</label>
+              <input type="text" id="u-name" style="width:100%" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Senha</label>
+              <input type="password" id="u-password" style="width:100%" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Horas Disponíveis / mês</label>
+              <input type="number" id="u-horas" min="0" style="width:100%" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Função</label>
+              <select id="u-role" style="width:100%">
+                <option value="user">Usuário</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Ativo</label>
+              <select id="u-active" style="width:100%">
+                <option value="true">Ativo</option>
+                <option value="false">Inativo</option>
+              </select>
+            </div>
+          </div>
+        </div><!-- /modal-user-content -->
+
+      </div><!-- /modal-body -->
+
+      <!-- Footer do modal -->
+      <div class="modal-footer">
+        <button class="btn btn-danger" id="btn-delete" onclick="deleteTask()">🗑 Excluir</button>
+        <div class="modal-footer-right">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button class="btn btn-primary" id="btn-save" onclick="saveTask()">Salvar</button>
+        </div>
+      </div>
+
+    </div><!-- /modal -->
+  </div><!-- /modal-overlay -->
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SCRIPTS — ordem de dependência
+       ═══════════════════════════════════════════════════════════════════ -->
+
+  <!-- Supabase JS Client v2 (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+  <!-- Configurações e constantes -->
+  <script src="./assets/js/constants.js"></script>
+
+  <!-- Funções auxiliares -->
+  <script src="./assets/js/helpers.js"></script>
+
+  <!-- Componentes de UI -->
+  <script src="./assets/js/uiComponents.js"></script>
+  <script src="./assets/js/csvHandler.js"></script>
+
+  <!-- Provider Supabase -->
+  <script src="./assets/js/supabaseProvider.js"></script>
+
+  <!-- Aplicação principal (bootstrap) -->
+  <script src="./assets/js/app.js"></script>
+
+</body>
+</html>
