@@ -4,7 +4,7 @@ Aplicação de gestão de tarefas de desenvolvimento. Frontend puro (HTML + CSS 
 
 ---
 
-## Pré-requisitos
+## Pré-requisitos 
 
 - Navegador moderno (Chrome, Edge, Firefox, Safari)
 - Conta gratuita no [Supabase](https://supabase.com) (banco de dados)
