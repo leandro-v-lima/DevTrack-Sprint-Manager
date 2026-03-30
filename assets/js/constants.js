@@ -7,41 +7,57 @@
 const DEVTRACK_CONFIG = {
 
   // ── USUÁRIOS (fallback quando Supabase não está configurado) ──
+  // role: "admin" | "developer" | "products"
+  // menus: lista de views acessíveis (homepage e kanban são sempre obrigatórias)
   USERS: [
-    { username: "Alexandre",    name: "Alexandre",    password: "abc123",    horas_disponivel: 140, role: "admin", active: true },
-    { username: "Bruno",        name: "Bruno",        password: "abc123",    horas_disponivel: 120, role: "user",  active: true },
-    { username: "Lucas",        name: "Lucas",        password: "abc123",    horas_disponivel: 0,   role: "user",  active: true },
-    { username: "Leandro",      name: "Leandro",      password: "abc123",    horas_disponivel: 100, role: "user",  active: true },
-    { username: "Marini",       name: "Marini",       password: "abc123",    horas_disponivel: 120, role: "user",  active: true },
-    { username: "Michael",      name: "Michael",      password: "abc123",    horas_disponivel: 120, role: "user",  active: true },
-    { username: "Pedro",        name: "Pedro",        password: "abc123",    horas_disponivel: 40,  role: "user",  active: true },
-    { username: "ElawOn",       name: "ElawOn",       password: "abc123",    horas_disponivel: 0,   role: "user",  active: true },
-    { username: "leandro.lima", name: "Leandro Lima", password: "Lesao@123", horas_disponivel: 200, role: "user",  active: true },
+    { username: "Alexandre",    name: "Alexandre",    password: "abc123",    role: "admin",     active: true, menus: ["dashboard","backlog","release","integrations","developers","users"] },
+    { username: "Bruno",        name: "Bruno",        password: "abc123",    role: "developer", active: true, menus: ["dashboard","backlog"] },
+    { username: "Lucas",        name: "Lucas",        password: "abc123",    role: "developer", active: true, menus: ["dashboard","backlog"] },
+    { username: "Leandro",      name: "Leandro",      password: "abc123",    role: "developer", active: true, menus: ["dashboard","backlog"] },
+    { username: "Marini",       name: "Marini",       password: "abc123",    role: "developer", active: true, menus: ["dashboard","backlog"] },
+    { username: "Michael",      name: "Michael",      password: "abc123",    role: "developer", active: true, menus: ["dashboard","backlog"] },
+    { username: "Pedro",        name: "Pedro",        password: "abc123",    role: "developer", active: true, menus: ["dashboard","backlog"] },
+    { username: "ElawOn",       name: "ElawOn",       password: "abc123",    role: "developer", active: true, menus: ["dashboard","backlog"] },
+    { username: "leandro.lima", name: "Leandro Lima", password: "Lesao@123", role: "admin",     active: true, menus: ["dashboard","backlog","release","integrations","developers","users"] },
   ],
 
-  // ── DADOS FIXOS ──
+  // ── DESENVOLVEDORES — horas disponíveis por produto por dia útil ──
+  DEVELOPERS: [
+    { name: "Alexandre", Enterprise: 7, CLM: 0, ElawOn: 0, active: true },
+    { name: "Bruno",     Enterprise: 6, CLM: 0, ElawOn: 0, active: true },
+    { name: "Lucas",     Enterprise: 0, CLM: 0, ElawOn: 0, active: true },
+    { name: "Leandro",   Enterprise: 5, CLM: 0, ElawOn: 0, active: true },
+    { name: "Rodrigo",   Enterprise: 6, CLM: 0, ElawOn: 0, active: true },
+    { name: "Marini",    Enterprise: 6, CLM: 0, ElawOn: 0, active: true },
+    { name: "Michael",   Enterprise: 6, CLM: 0, ElawOn: 0, active: true },
+    { name: "Pedro",     Enterprise: 2, CLM: 0, ElawOn: 0, active: true },
+    { name: "ElawOn",    Enterprise: 0, CLM: 0, ElawOn: 0, active: true },
+  ],
+
+  // ── DADOS FIXOS (derivados de DEVELOPERS em runtime via _syncDevConfig) ──
   DEVS: [
     "Alexandre", "Bruno", "Lucas", "Leandro",
-    "Marini", "Michael", "Pedro", "ElawOn",
+    "Rodrigo", "Marini", "Michael", "Pedro", "ElawOn",
   ],
 
   DEV_HORAS: {
-    Alexandre: 140,
-    Bruno:     120,
-    Lucas:     0,
-    Leandro:   100,
-    Marini:    120,
-    Michael:   120,
-    Pedro:     40,
-    ElawOn:    0,
+    "Alexandre": 140,
+    "Bruno": 120,
+    "Lucas": 0,
+    "Leandro": 100,
+    "Rodrigo": 120,
+    "Marini": 120,
+    "Michael": 120,
+    "Pedro": 40,
+    "ElawOn": 0,
   },
 
   RELEASES: [
-    { id: "7.10.0", produto: "Enterprise", dataFim: "30/11/2025", status: "Concluído"    },
-    { id: "7.12.0", produto: "Enterprise", dataFim: "11/03/2026", status: "Em Andamento" },
-    { id: "7.1.18",  produto: "CLM",        dataFim: "11/03/2026", status: "Em Andamento" },
-    { id: "7.14.0", produto: "Enterprise", dataFim: "30/04/2026", status: "Planejado"    },
-    { id: "7.16.0", produto: "Enterprise", dataFim: "30/06/2026", status: "Planejado"    },
+    { id: "7.10.0", produto: "Enterprise", dataInicio: "01/08/2025", dataFim: "30/11/2025", status: "Concluído"    },
+    { id: "7.12.0", produto: "Enterprise", dataInicio: "01/12/2025", dataFim: "11/03/2026", status: "Em Andamento" },
+    { id: "7.1.18", produto: "CLM",        dataInicio: "01/12/2025", dataFim: "11/03/2026", status: "Em Andamento" },
+    { id: "7.14.0", produto: "Enterprise", dataInicio: "12/03/2026", dataFim: "30/04/2026", status: "Planejado"    },
+    { id: "7.16.0", produto: "Enterprise", dataInicio: "01/05/2026", dataFim: "30/06/2026", status: "Planejado"    },
   ],
 
   STATUS_LIST: [
