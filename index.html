@@ -49,11 +49,12 @@
     <button class="nav-btn" data-view="dashboard">📊 Dashboard</button>
     <button class="nav-btn active" data-view="kanban">🗂 Kanban</button>
     <button class="nav-btn" data-view="backlog">📋 Backlog</button>
+    <button class="nav-btn" data-view="release">📦 Releases</button>
+    <button class="nav-btn" data-view="developers">👨‍💻 Desenvolvedores</button>
     <button class="nav-btn" data-view="integrations" id="nav-integ">🔗 Integrações</button>
     <button class="nav-btn" data-view="users">👤 Usuários</button>
     <div class="spacer"></div>
     <button id="btn-new" class="btn btn-primary">✚ Nova Tarefa</button>
-    <button id="btn-new-release" class="btn btn-secondary">✚ Nova Release</button>
     <button id="btn-logout" class="btn btn-secondary" style="background:rgba(239,68,68,0.1);color:var(--red);border-color:rgba(239,68,68,0.4)">
       🚪 Sair
     </button>
@@ -67,10 +68,27 @@
       <span class="search-icon">🔍</span>
       <input type="text" id="search" placeholder="Buscar por ID, descrição ou cliente..." />
     </div>
-    <select id="f-status"><option value="">Todos os status</option></select>
-    <select id="f-dev"><option value="">Todos os devs</option></select>
-    <select id="f-release"><option value="">Todas as releases</option></select>
-    <select id="f-tipo"><option value="">Todos os tipos</option></select>
+    <div class="hp-dropdown fb-dropdown" id="fb-status-wrap">
+      <button class="hp-dropdown-btn" id="fb-status-btn"><span id="fb-status-lbl">Todos os status</span><span class="hp-arrow">▾</span></button>
+      <div class="hp-dropdown-panel" id="fb-status-panel"></div>
+    </div>
+    <div class="hp-dropdown fb-dropdown" id="fb-dev-wrap">
+      <button class="hp-dropdown-btn" id="fb-dev-btn"><span id="fb-dev-lbl">Todos os devs</span><span class="hp-arrow">▾</span></button>
+      <div class="hp-dropdown-panel" id="fb-dev-panel"></div>
+    </div>
+    <div class="hp-dropdown fb-dropdown" id="fb-release-wrap">
+      <button class="hp-dropdown-btn" id="fb-release-btn"><span id="fb-release-lbl">Todas as releases</span><span class="hp-arrow">▾</span></button>
+      <div class="hp-dropdown-panel" id="fb-release-panel"></div>
+    </div>
+    <div class="hp-dropdown fb-dropdown" id="fb-tipo-wrap">
+      <button class="hp-dropdown-btn" id="fb-tipo-btn"><span id="fb-tipo-lbl">Todos os tipos</span><span class="hp-arrow">▾</span></button>
+      <div class="hp-dropdown-panel" id="fb-tipo-panel"></div>
+    </div>
+    <div class="hp-dropdown fb-dropdown" id="fb-rstatus-wrap">
+      <button class="hp-dropdown-btn" id="fb-rstatus-btn"><span id="fb-rstatus-lbl">Status da release</span><span class="hp-arrow">▾</span></button>
+      <div class="hp-dropdown-panel" id="fb-rstatus-panel"></div>
+    </div>
+    <button class="hp-clear-btn btn btn-secondary" id="fb-clear" disabled>Limpar</button>
     <span class="filter-count" id="filter-count"></span>
   </div>
 
@@ -86,6 +104,7 @@
           <h2 id="homepage-title">Bem-vindo!</h2>
           <p id="homepage-subtitle">Aqui estão suas atividades e resumo</p>
         </div>
+        <div id="homepage-filters"></div>
         <div class="kpi-grid" id="homepage-kpi-grid"></div>
         <div class="two-col">
           <div class="panel">
@@ -151,6 +170,35 @@
           </thead>
           <tbody id="backlog-body"></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- RELEASES ─────────────────────────────────────────────────────── -->
+    <div class="view" id="view-release">
+      <div id="release-content">
+        <div class="release-page-header">
+          <div>
+            <h2 style="font-size:24px;font-weight:800;margin-bottom:4px">Releases</h2>
+            <p style="font-size:13px;color:var(--muted)">Gestão e visibilidade das releases</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="rel-view-toggle">
+              <button class="rel-toggle-btn active" id="rel-view-cards">⊞ Cards</button>
+              <button class="rel-toggle-btn" id="rel-view-table">≡ Tabela</button>
+            </div>
+            <button id="btn-new-release" class="btn btn-primary">✚ Nova Release</button>
+          </div>
+        </div>
+        <div class="kpi-grid" id="release-kpi-grid"></div>
+        <div id="release-cards-wrap" class="release-cards-grid"></div>
+        <div id="release-table-wrap" style="display:none;border:1px solid var(--border);border-radius:12px;overflow:hidden"></div>
+      </div>
+    </div>
+
+    <!-- Modal de detalhe de release -->
+    <div id="rel-detail-overlay">
+      <div class="rel-detail-modal">
+        <div id="rel-detail-content"></div>
       </div>
     </div>
 
@@ -300,6 +348,46 @@
       </div>
     </div>
 
+    <!-- DESENVOLVEDORES ─────────────────────────────────────────────── -->
+    <div class="view" id="view-developers">
+      <div id="dev-content">
+        <div class="release-page-header">
+          <div>
+            <h2 style="font-size:24px;font-weight:800;margin-bottom:4px">Desenvolvedores</h2>
+            <p style="font-size:13px;color:var(--muted)">Gestão de capacidade por produto e visão de alocação</p>
+          </div>
+          <button id="btn-new-dev" class="btn btn-primary">✚ Novo Desenvolvedor</button>
+        </div>
+
+        <!-- Gestão -->
+        <div class="panel" style="margin-bottom:20px">
+          <div class="panel-title">Gestão de Desenvolvedores</div>
+          <div style="overflow-x:auto">
+            <table id="dev-mgmt-table" class="rel-table">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th style="text-align:center">Enterprise (h/dia)</th>
+                  <th style="text-align:center">CLM (h/dia)</th>
+                  <th style="text-align:center">ElawOn (h/dia)</th>
+                  <th style="text-align:center">Cap. Enterprise/mês</th>
+                  <th style="text-align:center">Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="dev-mgmt-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Alocação -->
+        <div class="panel">
+          <div class="panel-title">Visão de Alocação por Release</div>
+          <div id="dev-alloc-content"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- USUÁRIOS ─────────────────────────────────────────────────────── -->
     <div class="view" id="view-users">
       <div class="panel" style="margin:18px">
@@ -311,8 +399,8 @@
               <tr>
                 <th>Login</th>
                 <th>Nome</th>
-                <th>Role</th>
-                <th>Horas</th>
+                <th>Perfil</th>
+                <th>Menus</th>
                 <th>Status</th>
                 <th>Ações</th>
               </tr>
@@ -447,6 +535,7 @@
                 <input type="date" id="r-fim" style="width:100%" />
               </div>
             </div>
+            <div id="r-capacity-info" style="display:none;font-size:12px;color:var(--muted);padding:8px 10px;background:var(--bg);border-radius:6px;border:1px solid var(--border);margin-bottom:12px"></div>
             <div class="form-group">
               <label class="form-label">Status</label>
               <select id="r-status" style="width:100%">
@@ -461,38 +550,81 @@
         <!-- Seção: Usuário -->
         <div id="modal-user-content" class="modal-section" style="display:none">
           <div style="width:100%">
-            <div class="form-group">
-              <label class="form-label">Login</label>
-              <input type="text" id="u-username" style="width:100%" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Nome</label>
-              <input type="text" id="u-name" style="width:100%" />
+            <div class="form-row" style="margin-bottom:14px">
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Login</label>
+                <input type="text" id="u-username" style="width:100%" />
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Nome</label>
+                <input type="text" id="u-name" style="width:100%" />
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label">Senha</label>
               <input type="password" id="u-password" style="width:100%" />
             </div>
+            <div class="form-row" style="margin-bottom:14px">
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Perfil</label>
+                <select id="u-role" style="width:100%">
+                  <option value="admin">Administrador</option>
+                  <option value="developer">Desenvolvedor</option>
+                  <option value="products">Produtos</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Status</label>
+                <select id="u-active" style="width:100%">
+                  <option value="true">Ativo</option>
+                  <option value="false">Inativo</option>
+                </select>
+              </div>
+            </div>
+            <div id="u-menus-section" class="form-group" style="display:none">
+              <label class="form-label">Menus Visíveis <span style="color:var(--muted);font-size:11px">(Homepage e Kanban são obrigatórios)</span></label>
+              <div class="menus-check-grid">
+                <label class="hp-check-item"><input type="checkbox" name="u-menu" value="dashboard"> Dashboard</label>
+                <label class="hp-check-item"><input type="checkbox" name="u-menu" value="backlog"> Backlog</label>
+                <label class="hp-check-item"><input type="checkbox" name="u-menu" value="release"> Releases</label>
+                <label class="hp-check-item"><input type="checkbox" name="u-menu" value="developers"> Desenvolvedores</label>
+                <label class="hp-check-item"><input type="checkbox" name="u-menu" value="integrations"> Integrações</label>
+              </div>
+            </div>
+          </div>
+        </div><!-- /modal-user-content -->
+
+        <!-- Seção: Desenvolvedor -->
+        <div id="modal-dev-content" class="modal-section" style="display:none">
+          <div style="width:100%">
             <div class="form-group">
-              <label class="form-label">Horas Disponíveis / mês</label>
-              <input type="number" id="u-horas" min="0" style="width:100%" />
+              <label class="form-label">Nome do Desenvolvedor</label>
+              <input type="text" id="d-name" style="width:100%" placeholder="Ex: João Silva" />
+            </div>
+            <div class="form-label" style="margin-bottom:10px;color:var(--muted);font-size:12px">Horas disponíveis por dia útil — por produto</div>
+            <div class="form-row" style="margin-bottom:14px">
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Enterprise</label>
+                <input type="number" id="d-enterprise" min="0" max="24" step="0.5" style="width:100%" placeholder="0" />
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">CLM</label>
+                <input type="number" id="d-clm" min="0" max="24" step="0.5" style="width:100%" placeholder="0" />
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">ElawOn</label>
+                <input type="number" id="d-elawon" min="0" max="24" step="0.5" style="width:100%" placeholder="0" />
+              </div>
             </div>
             <div class="form-group">
-              <label class="form-label">Função</label>
-              <select id="u-role" style="width:100%">
-                <option value="user">Usuário</option>
-                <option value="admin">Administrador</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Ativo</label>
-              <select id="u-active" style="width:100%">
+              <label class="form-label">Status</label>
+              <select id="d-active" style="width:100%">
                 <option value="true">Ativo</option>
                 <option value="false">Inativo</option>
               </select>
             </div>
           </div>
-        </div><!-- /modal-user-content -->
+        </div><!-- /modal-dev-content -->
 
       </div><!-- /modal-body -->
 

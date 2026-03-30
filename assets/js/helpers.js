@@ -217,3 +217,79 @@ function getStats(tasks) {
     hoursCompleted,
   };
 }
+
+/**
+ * Algoritmo de Butcher para calcular a data da Páscoa
+ */
+function getEaster(year) {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day   = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+
+/**
+ * Retorna um Set com os feriados nacionais brasileiros de um ano (formato "yyyy-mm-dd")
+ */
+function getHolidaysBR(year) {
+  const holidays = new Set();
+  const add = (m, d) => {
+    const dt = new Date(year, m - 1, d);
+    holidays.add(dt.toISOString().slice(0, 10));
+  };
+  // Feriados fixos
+  add(1, 1); add(4, 21); add(5, 1); add(9, 7);
+  add(10, 12); add(11, 2); add(11, 15); add(11, 20); add(12, 25);
+  // Feriados móveis (baseados na Páscoa)
+  const easter  = getEaster(year);
+  const addDays = (dt, n) => { const d = new Date(dt); d.setDate(d.getDate() + n); return d; };
+  [
+    addDays(easter, -48), // Carnaval (segunda)
+    addDays(easter, -47), // Carnaval (terça)
+    addDays(easter, -2),  // Sexta-feira Santa
+    addDays(easter, 60),  // Corpus Christi
+  ].forEach(dt => holidays.add(dt.toISOString().slice(0, 10)));
+  return holidays;
+}
+
+/**
+ * Conta dias úteis entre duas datas (aceita "dd/mm/yyyy" ou "yyyy-mm-dd")
+ */
+function businessDays(startStr, endStr) {
+  if (!startStr || !endStr) return 0;
+  const parseDate = (s) => {
+    if (s.includes("/")) { const [d, m, y] = s.split("/").map(Number); return new Date(y, m - 1, d); }
+    const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d);
+  };
+  const start = parseDate(startStr), end = parseDate(endStr);
+  if (isNaN(start) || isNaN(end) || start > end) return 0;
+  const holidays = new Set();
+  for (let y = start.getFullYear(); y <= end.getFullYear(); y++)
+    getHolidaysBR(y).forEach(h => holidays.add(h));
+  let count = 0;
+  const cur = new Date(start);
+  while (cur <= end) {
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6 && !holidays.has(cur.toISOString().slice(0, 10))) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
+/** Converte "dd/mm/yyyy" → "yyyy-mm-dd" (formato para input[type=date]) */
+function displayToDateInput(s) {
+  if (!s || !s.includes("/")) return s || "";
+  const [d, m, y] = s.split("/");
+  return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
+}
+
+/** Converte "yyyy-mm-dd" → "dd/mm/yyyy" */
+function dateInputToDisplay(s) {
+  if (!s || !s.includes("-")) return s || "";
+  const [y, m, d] = s.split("-");
+  return `${d}/${m}/${y}`;
+}
