@@ -44,8 +44,9 @@ class DevTrackApp {
     this._openFbPanel            = null;
     this._fbListenerReady        = false;
     this._fbDropdownsInitialized = false;
-    this.backlogCollapsed      = new Set();
+    this.backlogExpanded       = new Set();  // keys of expanded backlog groups
     this.currentReleaseView    = "cards";
+    this.timeEntries           = [];
 
     this._editingReleaseId     = null;
     this.releaseKpiFilter      = null;
@@ -87,6 +88,9 @@ class DevTrackApp {
       const devs = await this.dataProvider.getDevelopers?.();
       this.developers = (devs && devs.length) ? devs : (this.config.DEVELOPERS ? JSON.parse(JSON.stringify(this.config.DEVELOPERS)) : []);
       this._syncDevConfig();
+
+      // Carregar apontamentos de horas
+      this.timeEntries = await this.dataProvider.getAllTimeEntries?.() || [];
 
       // Carregar releases do provider e atualizar config
       const releases = await this.dataProvider.getReleases();
@@ -200,6 +204,14 @@ class DevTrackApp {
       if (e.target.matches("button.user-delete")) { this.removeUser(e.target.dataset.username); return; }
       if (e.target.matches("button.user-edit"))   { this.openEditUser(e.target.dataset.username); }
     });
+
+    // Task modal — produto change filters release options
+    document.getElementById("m-produto")?.addEventListener("change", () => {
+      this._updateReleaseSelectByProduto();
+    });
+
+    // Time entries
+    document.getElementById("btn-add-timeentry")?.addEventListener("click", () => this._addTimeEntry());
 
     // Release
     document.getElementById("btn-new-release")?.addEventListener("click", () => this.openNewRelease());
@@ -395,13 +407,20 @@ class DevTrackApp {
     if (this.currentView === "developers")  this.renderDevelopers();
   }
 
-  renderKanban(filtered)    { UIComponents.renderKanban(filtered, this.config); }
+  renderKanban(filtered) {
+    // Kanban only shows tickets linked to "Em Andamento" releases
+    const emAndamentoIds = new Set(
+      (this.config.RELEASES || []).filter((r) => r.status === "Em Andamento").map((r) => r.id)
+    );
+    const kanbanTasks = filtered.filter((t) => t.release && emAndamentoIds.has(t.release));
+    UIComponents.renderKanban(kanbanTasks, this.config);
+  }
   renderBacklog(filtered) {
-    UIComponents.renderBacklog(filtered, this.config, this.sortCol, this.sortDir, this.backlogCollapsed, (id) => {
-      if (this.backlogCollapsed.has(id)) this.backlogCollapsed.delete(id);
-      else this.backlogCollapsed.add(id);
+    UIComponents.renderBacklog(filtered, this.config, this.sortCol, this.sortDir, this.backlogExpanded, (id) => {
+      if (this.backlogExpanded.has(id)) this.backlogExpanded.delete(id);
+      else this.backlogExpanded.add(id);
       this.renderAll();
-    });
+    }, this.currentUser?.role);
   }
   renderDashboard(filtered) { UIComponents.renderDashboard(filtered, this.config); }
 
@@ -730,12 +749,14 @@ class DevTrackApp {
     const btnDelete = document.getElementById("btn-delete");
     if (btnDelete) btnDelete.style.display = mode === "task" ? "" : "none";
 
-    // Garante permissão de edição de tarefa para perfil developer (só seus tickets)
-    if (mode === "task" && this.currentUser?.role === "developer") {
-      const isOwner = this.currentTask?.dev === this.currentUser.name || this.currentTask?.dev === this.currentUser.username;
-      if (btnDelete) btnDelete.style.display = isOwner ? "" : "none";
-      document.getElementById("btn-save").disabled = !isOwner && !this.isNewTask;
-    } else if (mode === "task") {
+    // Re-enable all task fields before role restrictions are applied (via _applyTaskModalRoleRestrictions)
+    if (mode === "task") {
+      ["m-desc", "m-cliente", "m-demandante", "m-ticket", "m-data",
+       "m-hdev", "m-hqa", "m-status", "m-dev", "m-produto",
+       "m-prio", "m-tipo", "m-classif", "m-modulo", "m-release"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = false;
+      });
       document.getElementById("btn-save").disabled = false;
     }
   }
@@ -761,14 +782,140 @@ class DevTrackApp {
 
     setSelect("m-status",  t.status);
     setSelect("m-dev",     t.dev);
+
+    // Fill produto first, then filter releases by produto
+    const pEl = document.getElementById("m-produto");
+    if (pEl) pEl.value = t.produto || "Enterprise";
+    this._updateReleaseSelectByProduto();
     setSelect("m-release", t.release);
+
     setSelect("m-prio",    t.prioridade);
     setSelect("m-tipo",    t.tipo);
     setSelect("m-classif", t.classif);
     setSelect("m-modulo",  t.modulo);
 
     document.getElementById("btn-save").textContent = this.isNewTask ? "✚ Criar Tarefa" : "Salvar";
+
+    // Time entries — render list and set default date
+    this._renderTimeEntriesInModal(t.id);
+    const teDate = document.getElementById("m-te-date");
+    if (teDate) teDate.value = new Date().toISOString().slice(0, 10);
+    const teHours = document.getElementById("m-te-hours");
+    if (teHours) teHours.value = "";
+
     document.getElementById("modal-overlay").classList.add("open");
+
+    // Apply role-based field restrictions
+    this._applyTaskModalRoleRestrictions();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // APONTAMENTO DE HORAS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  _renderTimeEntriesInModal(taskId) {
+    const container = document.getElementById("m-timeentries-list");
+    if (!container) return;
+    const entries = this.timeEntries.filter((e) => e.taskId === taskId);
+    const total   = entries.reduce((a, e) => a + (e.horas || 0), 0);
+
+    if (!entries.length) {
+      container.innerHTML = '<p style="color:var(--muted);font-size:12px;text-align:center;padding:8px 0">Nenhum apontamento registrado</p>';
+      return;
+    }
+
+    container.innerHTML = entries
+      .sort((a, b) => (a.data || "").localeCompare(b.data || ""))
+      .map((e) => `
+        <div class="te-row">
+          <span class="te-date">${e.data || "—"}</span>
+          <span class="te-hours">${e.horas}h</span>
+          <span class="te-dev">${e.dev || ""}</span>
+          <button class="te-delete-btn" data-te-id="${e.id}" title="Remover">✕</button>
+        </div>`).join("") +
+      `<div class="te-total">Total apontado: <strong style="color:var(--accent)">${total}h</strong></div>`;
+
+    container.querySelectorAll(".te-delete-btn").forEach((btn) => {
+      btn.addEventListener("click", () => this._deleteTimeEntry(Number(btn.dataset.teId)));
+    });
+  }
+
+  async _addTimeEntry() {
+    if (!this.currentTask) return;
+    const dateEl  = document.getElementById("m-te-date");
+    const hoursEl = document.getElementById("m-te-hours");
+    const date    = dateEl?.value;
+    const horas   = parseFloat(hoursEl?.value) || 0;
+    if (!date || !horas) { alert("Informe data e horas para o apontamento."); return; }
+
+    const dev   = this.currentUser?.name || this.currentUser?.username || "";
+    const entry = { taskId: this.currentTask.id, dev, data: dateInputToDisplay(date), horas };
+
+    try {
+      const saved = await this.dataProvider.saveTimeEntry?.(entry) || { ...entry, id: Date.now() };
+      this.timeEntries.push(saved);
+    } catch (_) {
+      this.timeEntries.push({ ...entry, id: Date.now() });
+    }
+
+    if (hoursEl) hoursEl.value = "";
+    this._renderTimeEntriesInModal(this.currentTask.id);
+  }
+
+  async _deleteTimeEntry(teId) {
+    try { await this.dataProvider.deleteTimeEntry?.(teId); } catch (_) {}
+    this.timeEntries = this.timeEntries.filter((e) => e.id !== teId);
+    if (this.currentTask) this._renderTimeEntriesInModal(this.currentTask.id);
+  }
+
+  /**
+   * Repopulates m-release to only show releases with the same produto as m-produto.
+   */
+  _updateReleaseSelectByProduto() {
+    const produto = document.getElementById("m-produto")?.value || "Enterprise";
+    const sel = document.getElementById("m-release");
+    if (!sel) return;
+    const filtered = (this.config.RELEASES || []).filter((r) => r.produto === produto);
+    sel.innerHTML = `<option value="">Sem release</option>`;
+    filtered.forEach((r) => {
+      const opt = document.createElement("option");
+      opt.value = r.id;
+      opt.textContent = r.id;
+      sel.appendChild(opt);
+    });
+  }
+
+  /**
+   * Applies field enable/disable restrictions to the task modal based on user role.
+   * - admin: full access
+   * - developer: cannot edit horas (m-hdev, m-hqa)
+   * - products: can ONLY change m-release, and only on tickets with status "Planejado"
+   */
+  _applyTaskModalRoleRestrictions() {
+    const role = this.currentUser?.role;
+    if (!role || role === "admin") return;
+
+    const allEditable = ["m-desc", "m-cliente", "m-demandante", "m-ticket", "m-data",
+                         "m-hdev", "m-hqa", "m-status", "m-dev", "m-produto",
+                         "m-prio", "m-tipo", "m-classif", "m-modulo", "m-release"];
+
+    if (role === "products") {
+      // Products can ONLY change release on Planejado tickets (not on new tasks)
+      const canEditRelease = !this.isNewTask && this.currentTask?.status === "Planejado";
+      allEditable.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = true;
+      });
+      const mRel = document.getElementById("m-release");
+      if (mRel) mRel.disabled = !canEditRelease;
+      document.getElementById("btn-save").disabled = !canEditRelease;
+    } else if (role === "developer") {
+      // Developer cannot edit hours
+      ["m-hdev", "m-hqa"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = true;
+      });
+    }
   }
 
   openModal(t) {
@@ -789,14 +936,15 @@ class DevTrackApp {
       modulo:     "Geral",
       cliente:    "",
       desc:       "",
-      release:    this.config.RELEASES[0]?.id || "",
+      release:    "",
       prioridade: "Média",
-      status:     "Planejado",
+      status:     "Pendente",
       dev:        this.config.DEVS[0] || "",
       demandante: "",
       dataReg:    new Date().toLocaleDateString("pt-BR"),
       origem:     "manual",
       origemId:   "",
+      produto:    "Enterprise",
     };
     this.isNewTask = true;
     this.isNewUser = false;
@@ -1065,6 +1213,8 @@ class DevTrackApp {
             ${riskBadges}
           </div>
           <div class="rel-card-actions" onclick="event.stopPropagation()">
+            ${rel.status === "Planejado"    ? `<button class="rel-action-btn rel-action-start"    data-action="start"    data-rid="${rel.id}" title="Iniciar release">▶ Iniciar</button>` : ""}
+            ${rel.status === "Em Andamento" ? `<button class="rel-action-btn rel-action-finalize" data-action="finalize" data-rid="${rel.id}" title="Finalizar release">✓ Finalizar</button>` : ""}
             <button class="rel-action-btn" data-action="edit"   data-rid="${rel.id}" title="Editar">✏</button>
             <button class="rel-action-btn rel-action-delete" data-action="delete" data-rid="${rel.id}" title="Excluir">🗑</button>
           </div>
@@ -1122,7 +1272,9 @@ class DevTrackApp {
               <span style="font-size:11px;font-weight:700;color:${allocColor}">${pctAlloc}%</span>
             </div></td>
             <td style="font-size:13px">${alerts}</td>
-            <td onclick="event.stopPropagation()"><div style="display:flex;gap:4px">
+            <td onclick="event.stopPropagation()"><div style="display:flex;gap:4px;flex-wrap:wrap">
+              ${rel.status === "Planejado"    ? `<button class="rel-action-btn rel-action-start"    data-action="start"    data-rid="${rel.id}" title="Iniciar">▶ Iniciar</button>` : ""}
+              ${rel.status === "Em Andamento" ? `<button class="rel-action-btn rel-action-finalize" data-action="finalize" data-rid="${rel.id}" title="Finalizar">✓ Finalizar</button>` : ""}
               <button class="rel-action-btn" data-action="edit"   data-rid="${rel.id}" title="Editar">✏</button>
               <button class="rel-action-btn rel-action-delete" data-action="delete" data-rid="${rel.id}" title="Excluir">🗑</button>
             </div></td>
@@ -1153,12 +1305,14 @@ class DevTrackApp {
       });
     });
 
-    // Botões de ação (editar/excluir)
+    // Botões de ação (editar/excluir/iniciar/finalizar)
     document.querySelectorAll(".rel-action-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
-        if (btn.dataset.action === "edit")   this.openEditRelease(btn.dataset.rid);
-        if (btn.dataset.action === "delete") this.deleteRelease(btn.dataset.rid);
+        if (btn.dataset.action === "edit")     this.openEditRelease(btn.dataset.rid);
+        if (btn.dataset.action === "delete")   this.deleteRelease(btn.dataset.rid);
+        if (btn.dataset.action === "start")    this.startRelease(btn.dataset.rid);
+        if (btn.dataset.action === "finalize") this.finalizeRelease(btn.dataset.rid);
       });
     });
 
@@ -1207,7 +1361,7 @@ class DevTrackApp {
         <span style="font-family:monospace;font-size:10px;color:var(--dim);flex-shrink:0">#${t.id}</span>
         <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${t.desc}</span>
         <span class="badge" style="background:${ss.bg};color:${ss.color};border:1px solid ${ss.color}30;font-size:10px;white-space:nowrap;flex-shrink:0"><span class="badge-dot" style="background:${ss.dot}"></span>${t.status}</span>
-        <span style="font-family:monospace;font-size:11px;color:var(--accent);flex-shrink:0">${t.horasDev}h</span>
+        <span style="font-family:monospace;font-size:11px;color:var(--accent);flex-shrink:0">${(t.horasDev || 0) + (t.horasQa || 0)}h</span>
       </div>`;
     }).join("");
 
@@ -1252,11 +1406,16 @@ class DevTrackApp {
         ${devRows || `<p style="color:var(--muted);font-size:12px;text-align:center;padding:16px 0">Nenhum desenvolvedor alocado</p>`}
       </div>
 
-      <div class="rel-detail-section" style="border-bottom:none">
+      <div class="rel-detail-section">
         <div class="rel-detail-section-title">Tickets (${relTasks.length})</div>
         <div class="rel-tickets-list">
           ${ticketRows || `<p style="color:var(--muted);font-size:12px;text-align:center;padding:16px 0">Nenhum ticket vinculado</p>`}
         </div>
+      </div>
+
+      <div class="rel-detail-section" style="border-bottom:none">
+        <div class="rel-detail-section-title">Burndown</div>
+        ${UIComponents.generateBurndownSVG(data.rel, relTasks, this.timeEntries)}
       </div>`;
 
     // Close button
@@ -1305,6 +1464,35 @@ class DevTrackApp {
     document.getElementById("btn-save").textContent = "Salvar Release";
     document.getElementById("modal-overlay").classList.add("open");
     this._updateReleaseCapacityInfo();
+  }
+
+  async startRelease(releaseId) {
+    if (this.currentUser?.role !== "admin") return;
+    const rel = this.config.RELEASES.find((r) => r.id === releaseId);
+    if (!rel || rel.status !== "Planejado") return;
+    rel.status = "Em Andamento";
+    try { await this.dataProvider.saveRelease?.(rel); } catch (_) {}
+    this.renderRelease();
+    this.renderAll();
+  }
+
+  async finalizeRelease(releaseId) {
+    if (this.currentUser?.role !== "admin") return;
+    const rel = this.config.RELEASES.find((r) => r.id === releaseId);
+    if (!rel || rel.status !== "Em Andamento") return;
+    const relTasks = this.tasks.filter((t) => t.release === releaseId);
+    const pending  = relTasks.filter((t) => t.status !== "Concluído");
+    if (pending.length > 0) {
+      const list = pending.slice(0, 5).map((t) => `• #${t.id} — ${t.desc.slice(0, 60)}`).join("\n");
+      const more = pending.length > 5 ? `\n... e mais ${pending.length - 5} ticket(s)` : "";
+      alert(`⚠ Não é possível finalizar a release ${releaseId}.\n\n${pending.length} ticket(s) ainda não concluídos:\n${list}${more}`);
+      return;
+    }
+    if (!confirm(`Finalizar a release ${releaseId}?\nTodos os ${relTasks.length} ticket(s) estão concluídos.`)) return;
+    rel.status = "Concluído";
+    try { await this.dataProvider.saveRelease?.(rel); } catch (_) {}
+    this.renderRelease();
+    this.renderAll();
   }
 
   async deleteRelease(releaseId) {
@@ -1492,10 +1680,33 @@ class DevTrackApp {
     }
 
     // ── Salvar Tarefa ──
+    const role = this.currentUser?.role;
+
     // Perfil developer: só pode editar tarefas próprias
-    if (this.currentUser?.role === "developer" && !this.isNewTask) {
+    if (role === "developer" && !this.isNewTask) {
       const isOwner = this.currentTask?.dev === this.currentUser.name || this.currentTask?.dev === this.currentUser.username;
       if (!isOwner) { alert("Você só pode editar tarefas atribuídas a você."); return; }
+    }
+
+    // Perfil products: só pode alterar o campo release em tickets com status "Planejado"
+    if (role === "products") {
+      if (this.isNewTask || this.currentTask?.status !== "Planejado") {
+        alert("Perfil Produtos só pode alterar a release de tickets com status Planejado."); return;
+      }
+      // Apenas atualiza o campo release
+      const newRelease = document.getElementById("m-release").value;
+      this.currentTask.release = newRelease;
+      try {
+        await this.dataProvider.saveTask?.({ ...this.currentTask });
+        const idx = this.tasks.findIndex((t) => t.id === this.currentTask.id);
+        if (idx >= 0) this.tasks[idx] = { ...this.currentTask };
+      } catch (err) {
+        console.warn("saveTask (products):", err.message);
+      }
+      this.closeModal();
+      this.renderAll();
+      this.updateNavBadge();
+      return;
     }
 
     this.currentTask.desc       = document.getElementById("m-desc").value;
@@ -1503,8 +1714,7 @@ class DevTrackApp {
     this.currentTask.demandante = document.getElementById("m-demandante").value;
     this.currentTask.ticketOrc  = document.getElementById("m-ticket").value;
     this.currentTask.dataReg    = document.getElementById("m-data").value;
-    this.currentTask.horasDev   = parseInt(document.getElementById("m-hdev").value) || 0;
-    this.currentTask.horasQa    = parseInt(document.getElementById("m-hqa").value)  || 0;
+    this.currentTask.produto    = document.getElementById("m-produto").value || "Enterprise";
     this.currentTask.status     = document.getElementById("m-status").value;
     this.currentTask.dev        = document.getElementById("m-dev").value;
     this.currentTask.release    = document.getElementById("m-release").value;
@@ -1513,8 +1723,19 @@ class DevTrackApp {
     this.currentTask.classif    = document.getElementById("m-classif").value;
     this.currentTask.modulo     = document.getElementById("m-modulo").value;
 
+    // Admin can edit hours; developer cannot (fields are disabled so values are preserved)
+    if (role !== "developer") {
+      this.currentTask.horasDev = parseInt(document.getElementById("m-hdev").value) || 0;
+      this.currentTask.horasQa  = parseInt(document.getElementById("m-hqa").value)  || 0;
+    }
+
+    // Tickets com status Pendente não podem ter release vinculada
+    if (this.currentTask.status === "Pendente") {
+      this.currentTask.release = "";
+    }
+
     // Perfil products: não pode ultrapassar capacidade da release
-    if (this.currentUser?.role === "products") {
+    if (role === "products") {
       const releaseId  = this.currentTask.release;
       const rel        = this.config.RELEASES.find((r) => r.id === releaseId);
       if (rel) {
@@ -1548,6 +1769,18 @@ class DevTrackApp {
     this.closeModal();
     this.renderAll();
     this.updateNavBadge();
+  }
+
+  /**
+   * Moves a ticket from "Pendente" to "Planejado" (admin only action from backlog).
+   */
+  async planTask(taskId) {
+    if (this.currentUser?.role !== "admin") return;
+    const task = this.tasks.find((t) => t.id === Number(taskId));
+    if (!task || task.status !== "Pendente") return;
+    task.status = "Planejado";
+    try { await this.dataProvider.saveTask?.({ ...task }); } catch (_) {}
+    this.renderAll();
   }
 
   async deleteTask() {
@@ -1708,6 +1941,10 @@ class DevTrackApp {
     this.currentUser     = user;
     this.isAuthenticated = true;
 
+    // Homepage default: show only "Em Andamento" releases
+    this.homepageReleaseStatuses = ["Em Andamento"];
+    this.homepageReleaseIds      = [];
+
     // Exibir interface principal
     document.getElementById("view-login").classList.remove("active");
     document.getElementById("topbar").style.display    = "flex";
@@ -1755,6 +1992,7 @@ window.deleteTask    = ()   => window.app.deleteTask();
 window.updateTotal   = ()   => window.app.updateTotal();
 window.togglePolling = ()   => window.app.togglePolling();
 window.cancelPreview = ()   => CSVHandler.cancelPreview();
+window.planTask      = (id) => window.app.planTask(id);
 window.handleLogin   = async (event) => {
   event.preventDefault();
   const username = document.getElementById("login-user").value;

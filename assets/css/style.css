@@ -723,7 +723,6 @@ select { cursor: pointer; }
 .rel-detail-header {
   display: flex; align-items: flex-start; gap: 12px;
   padding: 20px 20px 16px; border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; background: var(--surface); z-index: 10;
 }
 .rel-detail-section {
   padding: 16px 20px; border-bottom: 1px solid var(--border);
@@ -1062,6 +1061,54 @@ select { cursor: pointer; }
   gap: 6px; padding: 10px; background: var(--bg);
   border: 1px solid var(--border); border-radius: 8px;
 }
+
+/* ── TIME ENTRIES (Apontamento de Horas) ──────────────────────────────── */
+.te-panel { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+
+.te-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 12px;
+}
+.te-row:last-of-type { border-bottom: none; }
+
+.te-date  { color: var(--muted); min-width: 90px; font-family: monospace; }
+.te-hours { color: var(--accent); font-weight: 700; font-family: monospace; min-width: 46px; }
+.te-dev   { color: var(--dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.te-delete-btn {
+  background: transparent; border: none; color: var(--dim);
+  cursor: pointer; padding: 2px 6px; border-radius: 4px;
+  font-size: 12px; flex-shrink: 0; transition: color 0.15s;
+}
+.te-delete-btn:hover { color: var(--red); }
+
+.te-total {
+  font-size: 11px; color: var(--muted);
+  padding-top: 8px; margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── RELEASE ACTION BUTTONS ─────────────────────────────────────────────── */
+.rel-action-start {
+  color: var(--accent) !important;
+  border-color: rgba(14,165,233,0.4) !important;
+  background: rgba(14,165,233,0.08) !important;
+  font-size: 11px; white-space: nowrap;
+}
+.rel-action-start:hover { background: rgba(14,165,233,0.16) !important; }
+
+.rel-action-finalize {
+  color: var(--green) !important;
+  border-color: rgba(16,185,129,0.4) !important;
+  background: rgba(16,185,129,0.08) !important;
+  font-size: 11px; white-space: nowrap;
+}
+.rel-action-finalize:hover { background: rgba(16,185,129,0.16) !important; }
+
+/* ── BACKLOG PENDENTE DE AVALIAÇÃO (vermelho) ─────────────────────────── */
+.backlog-release-pendente { background: rgba(239,68,68,0.05) !important; }
+.backlog-release-pendente .backlog-release-header-inner { border-left: 3px solid var(--red); padding-left: 10px; }
 
 /* ── RESPONSIVE ────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {

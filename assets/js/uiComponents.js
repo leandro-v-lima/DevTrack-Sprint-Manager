@@ -16,6 +16,8 @@ class UIComponents {
     board.innerHTML = "";
 
     config.STATUS_LIST.forEach((col) => {
+      // "Pendente" tickets are not shown in Kanban (they live in Backlog only)
+      if (col === "Pendente") return;
       const colTasks = tasks.filter((t) => t.status === col);
       const ss = config.STATUS_STYLE[col];
 
@@ -85,6 +87,14 @@ class UIComponents {
         card.addEventListener("dragend", () => card.classList.remove("dragging"));
         card.addEventListener("click", () => window.openModal(t));
 
+        const releaseTag = t.release
+          ? `<span style="font-size:9px;font-weight:700;color:var(--accent);font-family:monospace">${t.release}</span>`
+          : "";
+        const produtoColor = t.produto === "CLM" ? "#f59e0b" : t.produto === "ElawOn" ? "#a78bfa" : "#0ea5e9";
+        const produtoTag = t.produto
+          ? `<span style="font-size:9px;font-weight:700;color:${produtoColor};background:${produtoColor}15;padding:1px 5px;border-radius:4px;border:1px solid ${produtoColor}30">${t.produto}</span>`
+          : "";
+
         card.innerHTML = `
           <div class="card-top">
             <span class="card-id">#${t.id}</span>
@@ -94,6 +104,8 @@ class UIComponents {
           <p class="card-client">${t.cliente}</p>
           <div class="card-footer">
             <span class="badge" style="background:${ps.bg};color:${ps.color};border:1px solid ${ps.color}30;font-size:10px">${t.prioridade}</span>
+            ${produtoTag}
+            ${releaseTag}
             ${avatarHTML(t.dev, 22)}
           </div>`;
 
@@ -105,7 +117,7 @@ class UIComponents {
   /**
    * Renderiza a tabela de backlog com ordenação por coluna
    */
-  static renderBacklog(tasks, config, sortCol, sortDir, collapsed = new Set(), onToggle = () => {}) {
+  static renderBacklog(tasks, config, sortCol, sortDir, expanded = new Set(), onToggle = () => {}, userRole = "admin") {
     const tbody = document.getElementById("backlog-body");
     if (!tbody) return;
 
@@ -120,10 +132,18 @@ class UIComponents {
     const releaseOrder = config.RELEASES.map((r) => r.id);
     const releaseMap   = new Map(config.RELEASES.map((r) => [r.id, r]));
 
-    // Agrupa tasks — release vazia/nula → chave especial "__none__"
+    // Agrupa tasks:
+    //  __pendente__ = tickets com status "Pendente" (Pendente de Avaliação - vermelho)
+    //  __none__     = tickets sem release e status != "Pendente" (Pendente de Planejamento - laranja)
+    //  [release id] = agrupados pela release
     const groups = {};
     tasks.forEach((t) => {
-      const key = (t.release || "").trim() || "__none__";
+      let key;
+      if (t.status === "Pendente") {
+        key = "__pendente__";
+      } else {
+        key = (t.release || "").trim() || "__none__";
+      }
       if (!groups[key]) groups[key] = [];
       groups[key].push(t);
     });
@@ -138,10 +158,11 @@ class UIComponents {
         return sa - sb;
       });
     const unknownReleases = Object.keys(groups).filter(
-      (id) => id !== "__none__" && !releaseMap.has(id)
+      (id) => id !== "__none__" && id !== "__pendente__" && !releaseMap.has(id)
     );
     const orderedKeys = [
-      ...(groups["__none__"] ? ["__none__"] : []),
+      ...(groups["__pendente__"] ? ["__pendente__"] : []),
+      ...(groups["__none__"]     ? ["__none__"]     : []),
       ...configReleases,
       ...unknownReleases,
     ];
@@ -150,31 +171,37 @@ class UIComponents {
 
     orderedKeys.forEach((key) => {
       const isNone       = key === "__none__";
+      const isPendente   = key === "__pendente__";
       const releaseTasks = groups[key];
-      const rel          = isNone ? null : releaseMap.get(key);
+      const rel          = (isNone || isPendente) ? null : releaseMap.get(key);
       const relStatus    = rel ? rel.status : null;
-      const isCollapsed  = collapsed.has(key);
+      // Collapsed by default — expanded only if key is in the expanded Set
+      const isCollapsed  = !expanded.has(key);
 
-      const rc = isNone            ? "#f59e0b"        :
-        relStatus === "Concluído"  ? "var(--green)"   :
-        relStatus === "Em Andamento" ? "var(--accent)" : "#64748b";
+      const rc = isPendente          ? "var(--red)"     :
+        isNone                       ? "#f59e0b"        :
+        relStatus === "Concluído"    ? "var(--green)"   :
+        relStatus === "Em Andamento" ? "var(--accent)"  : "#64748b";
+
+      const groupLabel = isPendente ? "Pendente de Avaliação"
+        : isNone ? "Pendente de Planejamento" : key;
+      const groupBadge = isPendente
+        ? `<span class="backlog-release-badge" style="background:var(--red-dk);color:var(--red);border:1px solid rgba(239,68,68,0.4)">🔴 Pendente</span>`
+        : isNone
+        ? `<span class="backlog-release-badge" style="background:#f59e0b18;color:#f59e0b;border:1px solid #f59e0b44">⚠ Sem Release</span>`
+        : `<span class="backlog-release-badge" style="background:${rc}18;color:${rc};border:1px solid ${rc}44">${relStatus}</span>`;
 
       // ── Cabeçalho da release ──
       const headerTr = document.createElement("tr");
-      headerTr.className = "backlog-release-header" + (isNone ? " backlog-release-none" : "");
+      headerTr.className = "backlog-release-header" + (isNone ? " backlog-release-none" : "") + (isPendente ? " backlog-release-pendente" : "");
       headerTr.innerHTML = `
-        <td colspan="11">
+        <td colspan="13">
           <div class="backlog-release-header-inner">
             <button class="backlog-toggle-btn" title="${isCollapsed ? "Expandir" : "Recolher"}">
               ${isCollapsed ? "▶" : "▼"}
             </button>
-            <span class="backlog-release-id" style="color:${rc}">
-              ${isNone ? "Pendente de Planejamento" : key}
-            </span>
-            ${isNone
-              ? `<span class="backlog-release-badge" style="background:#f59e0b18;color:#f59e0b;border:1px solid #f59e0b44">⚠ Sem Release</span>`
-              : `<span class="backlog-release-badge" style="background:${rc}18;color:${rc};border:1px solid ${rc}44">${relStatus}</span>`
-            }
+            <span class="backlog-release-id" style="color:${rc}">${groupLabel}</span>
+            ${groupBadge}
             ${rel ? `<span class="backlog-release-meta">${rel.produto} · Entrega: ${rel.dataFim}</span>` : ""}
             <span class="backlog-release-count">${releaseTasks.length} ticket${releaseTasks.length !== 1 ? "s" : ""}</span>
           </div>
@@ -202,6 +229,12 @@ class UIComponents {
         const origemColor = t.origem === "csv" ? "#f59e0b" : t.origem === "api" ? "#10b981" : "#475569";
         const origemLabel = t.origem === "csv" ? "📄 CSV"  : t.origem === "api" ? "🔌 API"  : "manual";
 
+        const planejarBtn = (t.status === "Pendente" && userRole === "admin")
+          ? `<button class="rel-action-btn" onclick="event.stopPropagation();planTask(${t.id})" title="Mover para Planejado" style="color:var(--accent)">▶ Planejar</button>`
+          : "";
+
+        const produtoColor = t.produto === "CLM" ? "#f59e0b" : t.produto === "ElawOn" ? "#a78bfa" : "var(--accent)";
+
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td style="font-family:monospace;color:var(--muted);font-size:11px">#${t.id}</td>
@@ -210,11 +243,13 @@ class UIComponents {
           <td><span class="badge" style="background:${ss.bg};color:${ss.color};border:1px solid ${ss.color}30"><span class="badge-dot" style="background:${ss.dot}"></span>${t.status}</span></td>
           <td><div style="display:flex;gap:6px;align-items:center">${avatarHTML(t.dev, 20)}<span>${t.dev}</span></div></td>
           <td style="font-family:monospace;color:var(--accent);font-size:11px">${t.release || "—"}</td>
+          <td style="font-family:monospace;color:${produtoColor};font-size:11px;font-weight:600">${t.produto || "—"}</td>
           <td style="color:var(--muted);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.cliente}</td>
           <td style="color:var(--accent);font-family:monospace;text-align:right">${t.horasDev}</td>
           <td style="color:#f59e0b;font-family:monospace;text-align:right">${t.horasQa}</td>
           <td style="color:${origemColor};font-size:11px;font-weight:600">${origemLabel}</td>
-          <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.desc}</td>`;
+          <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.desc}</td>
+          <td>${planejarBtn}</td>`;
         tr.addEventListener("click", () => window.openModal(t));
         tbody.appendChild(tr);
       });
@@ -229,10 +264,10 @@ class UIComponents {
       const footerTr = document.createElement("tr");
       footerTr.className = "backlog-release-footer";
       footerTr.innerHTML = `
-        <td colspan="7" style="text-align:right;color:var(--dim);font-size:11px">Totais da release</td>
+        <td colspan="8" style="text-align:right;color:var(--dim);font-size:11px">Totais da release</td>
         <td style="color:var(--accent);font-family:monospace;font-weight:700;text-align:right">${totalDev}h</td>
         <td style="color:#f59e0b;font-family:monospace;font-weight:700;text-align:right">${totalQa}h</td>
-        <td colspan="2">
+        <td colspan="3">
           <div class="backlog-release-progress">
             <span>${done}/${releaseTasks.length} concluídos</span>
             <div class="prog-bar-bg"><div class="prog-bar" style="width:${pct}%;background:${pctColor}"></div></div>
@@ -352,6 +387,177 @@ class UIComponents {
     if (m) m.textContent = tasks.filter((t) => t.origem === "manual").length;
     if (c) c.textContent = tasks.filter((t) => t.origem === "csv").length;
     if (a) a.textContent = tasks.filter((t) => t.origem === "api").length;
+  }
+
+  /**
+   * Gera o SVG do gráfico burndown para uma release.
+   *
+   * Linha ideal (tracejada): decrescimento linear de totalEstimado → 0 ao longo dos dias úteis.
+   * Linha real (azul): baseada nas horas dos tickets com status "Concluído" distribuídas
+   *   linearmente ao longo do período, de forma que o gráfico reflita progresso mesmo sem
+   *   apontamentos manuais. Se existirem apontamentos de horas (time_entries), eles são
+   *   sobrepostos como marcadores diários.
+   */
+  static generateBurndownSVG(release, relTasks, timeEntries) {
+    const parseDate = (s) => {
+      if (!s) return null;
+      if (s.includes("/")) { const [d, m, y] = s.split("/").map(Number); return new Date(y, m - 1, d); }
+      if (s.includes("-")) { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); }
+      return null;
+    };
+
+    const endDate = parseDate(release.dataFim);
+    if (!endDate) return '<p style="color:var(--muted);font-size:12px;text-align:center;padding:16px 0">Data de fim da release é necessária para gerar o burndown.</p>';
+
+    // dataInicio opcional: estima a partir do ticket mais antigo ou 30 dias antes do fim
+    let startDate = parseDate(release.dataInicio);
+    let startEstimated = false;
+    if (!startDate) {
+      const earliest = relTasks.reduce((min, t) => {
+        if (!t.dataReg) return min;
+        const d = parseDate(t.dataReg);
+        return d && (!min || d < min) ? d : min;
+      }, null);
+      startDate = earliest || new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+      startEstimated = true;
+      if (startDate >= endDate) startDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+    }
+
+    const totalEstimated = relTasks.reduce((a, t) => a + (t.horasDev || 0) + (t.horasQa || 0), 0);
+    if (!totalEstimated) return '<p style="color:var(--muted);font-size:12px;text-align:center;padding:16px 0">Sem horas estimadas — adicione estimativas nos tickets para gerar o burndown.</p>';
+
+    // Horas já concluídas (baseadas no status dos tickets — não requer apontamentos)
+    const horasConcluidas = relTasks
+      .filter((t) => t.status === "Concluído")
+      .reduce((a, t) => a + (t.horasDev || 0) + (t.horasQa || 0), 0);
+
+    // Dias úteis
+    const holidays = new Set();
+    for (let y = startDate.getFullYear(); y <= endDate.getFullYear(); y++) {
+      if (typeof getHolidaysBR === "function") getHolidaysBR(y).forEach((h) => holidays.add(h));
+    }
+    const days = [];
+    const cur  = new Date(startDate);
+    while (cur <= endDate) {
+      const dow = cur.getDay();
+      if (dow !== 0 && dow !== 6 && !holidays.has(cur.toISOString().slice(0, 10))) days.push(new Date(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+    if (!days.length) { days.push(new Date(startDate)); days.push(new Date(endDate)); }
+
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+
+    // ── Linha real: dois pontos fixos ──────────────────────────────────────────
+    // Ponto inicial: dia 0, remaining = totalEstimated
+    // Ponto atual:   hoje (ou último dia útil da release se já encerrada),
+    //                remaining = totalEstimated - horasConcluidas
+    const todayIdx = (() => {
+      // índice do dia útil mais próximo de hoje (ou do último dia se release encerrada)
+      let best = 0;
+      for (let i = 0; i < days.length; i++) {
+        if (days[i] <= today) best = i;
+        else break;
+      }
+      return best;
+    })();
+    const remainingNow = Math.max(0, totalEstimated - horasConcluidas);
+
+    // ── Linha Real (laranja): soma das horas apontadas nos tickets concluídos ─
+    // Mesmo comportamento da linha Esperado (2 pontos: início → hoje),
+    // mas o "burned" é a soma de time_entries dos tickets com status Concluído.
+    const concludedIds = new Set(relTasks.filter((t) => t.status === "Concluído").map((t) => t.id));
+    const apontadoConcluidos = timeEntries
+      .filter((e) => concludedIds.has(e.taskId))
+      .reduce((a, e) => a + (e.horas || 0), 0);
+    const remainingReal = Math.max(0, totalEstimated - apontadoConcluidos);
+    const hasApont = apontadoConcluidos > 0;
+
+    // ── SVG ───────────────────────────────────────────────────────────────────
+    const W = 480, H = 230;
+    const PAD = { top: 16, right: 16, bottom: 36, left: 52 };
+    const plotW = W - PAD.left - PAD.right;
+    const plotH = H - PAD.top - PAD.bottom;
+    const n = days.length;
+
+    const xScale = (i) => PAD.left + (i / Math.max(1, n - 1)) * plotW;
+    const yScale = (h) => PAD.top + plotH - (h / totalEstimated) * plotH;
+
+    // Linha ideal (tracejada cinza)
+    const idealPts = days.map((_, i) => `${i === 0 ? "M" : "L"}${xScale(i).toFixed(1)},${yScale(totalEstimated * (1 - i / Math.max(1, n - 1))).toFixed(1)}`).join(" ");
+
+    // Linha esperado (azul): progresso por conclusão de tickets (2 pontos: início → hoje)
+    const espPath = `M${xScale(0).toFixed(1)},${yScale(totalEstimated).toFixed(1)} L${xScale(todayIdx).toFixed(1)},${yScale(remainingNow).toFixed(1)}`;
+
+    // Linha real (laranja): 2 pontos âncora, igual à Esperado mas com apontamentos
+    const realPath = hasApont
+      ? `M${xScale(0).toFixed(1)},${yScale(totalEstimated).toFixed(1)} L${xScale(todayIdx).toFixed(1)},${yScale(remainingReal).toFixed(1)}`
+      : null;
+
+    // Eixo X labels
+    const labelIdxs = [...new Set([0, Math.floor(n / 4), Math.floor(n / 2), Math.floor(3 * n / 4), n - 1].filter((v) => v < n))];
+    const xLabels = labelIdxs.map((i) => {
+      const d = days[i];
+      return `<text x="${xScale(i).toFixed(1)}" y="${H - PAD.bottom + 15}" text-anchor="middle" font-size="9" fill="#64748b">${d.getDate()}/${d.getMonth() + 1}</text>`;
+    }).join("");
+
+    // Eixo Y labels
+    const yLabels = [0, 0.25, 0.5, 0.75, 1].map((f) => {
+      const h = Math.round(totalEstimated * f);
+      return `<text x="${PAD.left - 6}" y="${(yScale(h) + 4).toFixed(1)}" text-anchor="end" font-size="9" fill="#64748b">${h}h</text>`;
+    }).join("");
+
+    // Grid lines
+    const gridLines = [0, 0.25, 0.5, 0.75, 1].map((f) => {
+      const y = yScale(totalEstimated * f).toFixed(1);
+      return `<line x1="${PAD.left}" y1="${y}" x2="${W - PAD.right}" y2="${y}" stroke="#1e2d45" stroke-width="1"/>`;
+    }).join("");
+
+    // Linha vertical "hoje"
+    const todayLine = (today >= days[0] && today <= days[days.length - 1])
+      ? `<line x1="${xScale(todayIdx).toFixed(1)}" y1="${PAD.top}" x2="${xScale(todayIdx).toFixed(1)}" y2="${H - PAD.bottom}" stroke="#334155" stroke-width="1" stroke-dasharray="3,3"/>`
+      : "";
+
+    // Stats
+    const pct       = Math.round((horasConcluidas / totalEstimated) * 100);
+    const pctReal   = hasApont ? Math.round((apontadoConcluidos / totalEstimated) * 100) : null;
+    const burnColor = pct >= 90 ? "#10b981" : pct >= 50 ? "#0ea5e9" : "#f59e0b";
+    const realColor = pctReal !== null ? (pctReal >= 90 ? "#10b981" : pctReal >= 50 ? "#f59e0b" : "#ef4444") : "#f59e0b";
+
+    // Legenda (sempre 3 entradas: Ideal + Esperado + Real; Real aparece mesmo sem dados)
+    const legendY1 = PAD.top + 7, legendY2 = PAD.top + 20, legendY3 = PAD.top + 33;
+    const legendX  = W - 146;
+    const legend = `
+      <line x1="${legendX}" y1="${legendY1}" x2="${legendX + 18}" y2="${legendY1}" stroke="#475569" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <text x="${legendX + 22}" y="${legendY1 + 4}" font-size="9" fill="#64748b">Ideal</text>
+      <line x1="${legendX}" y1="${legendY2}" x2="${legendX + 18}" y2="${legendY2}" stroke="#0ea5e9" stroke-width="2"/>
+      <text x="${legendX + 22}" y="${legendY2 + 4}" font-size="9" fill="#0ea5e9">Esperado (concluído)</text>
+      <line x1="${legendX}" y1="${legendY3}" x2="${legendX + 18}" y2="${legendY3}" stroke="#f59e0b" stroke-width="2"/>
+      <text x="${legendX + 22}" y="${legendY3 + 4}" font-size="9" fill="#f59e0b">Real (apontado)</text>`;
+
+    return `
+      ${startEstimated ? `<p style="color:#f59e0b;font-size:10px;margin:0 0 6px">⚠ Data de início não configurada na release — período estimado.</p>` : ""}
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;display:flex;gap:16px;flex-wrap:wrap">
+        <span>Total estimado: <strong style="color:var(--text)">${totalEstimated}h</strong></span>
+        <span>Esperado concluído: <strong style="color:${burnColor}">${horasConcluidas}h (${pct}%)</strong></span>
+        <span>Apontado concluído: <strong style="color:#f59e0b">${apontadoConcluidos}h${pctReal !== null ? ` (${pctReal}%)` : ""}</strong></span>
+        <span>Restante: <strong style="color:var(--text)">${remainingNow}h</strong></span>
+      </div>
+      <svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block;overflow:visible">
+        ${gridLines}
+        ${todayLine}
+        <path d="${idealPts}" stroke="#475569" stroke-width="1.5" fill="none" stroke-dasharray="5,3"/>
+        <path d="${espPath}" stroke="#0ea5e9" stroke-width="2" fill="none"/>
+        <circle cx="${xScale(0).toFixed(1)}" cy="${yScale(totalEstimated).toFixed(1)}" r="3" fill="#0ea5e9"/>
+        <circle cx="${xScale(todayIdx).toFixed(1)}" cy="${yScale(remainingNow).toFixed(1)}" r="4" fill="#0ea5e9"/>
+        ${realPath ? `<path d="${realPath}" stroke="#f59e0b" stroke-width="2" fill="none"/>
+        <circle cx="${xScale(0).toFixed(1)}" cy="${yScale(totalEstimated).toFixed(1)}" r="3" fill="#f59e0b"/>
+        <circle cx="${xScale(todayIdx).toFixed(1)}" cy="${yScale(remainingReal).toFixed(1)}" r="4" fill="#f59e0b"/>` : ""}
+        <line x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${H - PAD.bottom}" stroke="#2a4060" stroke-width="1"/>
+        <line x1="${PAD.left}" y1="${H - PAD.bottom}" x2="${W - PAD.right}" y2="${H - PAD.bottom}" stroke="#2a4060" stroke-width="1"/>
+        ${xLabels}
+        ${yLabels}
+        ${legend}
+      </svg>`;
   }
 
   /**

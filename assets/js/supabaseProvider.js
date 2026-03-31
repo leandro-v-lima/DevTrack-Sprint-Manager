@@ -64,12 +64,13 @@ class SupabaseDataProvider {
       desc:       row.descricao   || "",
       release:    row.release     || "",
       prioridade: row.prioridade  || "Média",
-      status:     row.status      || "Planejado",
+      status:     row.status      || "Pendente",
       dev:        row.dev         || "",
       demandante: row.demandante  || "",
       dataReg:    row.data_reg    || "",
       origem:     row.origem      || "manual",
       origemId:   row.origem_id   || "",
+      produto:    row.produto     || "Enterprise",
     };
   }
 
@@ -86,12 +87,13 @@ class SupabaseDataProvider {
       descricao:   task.desc       || "",
       release:     task.release    || "",
       prioridade:  task.prioridade || "Média",
-      status:      task.status     || "Planejado",
+      status:      task.status     || "Pendente",
       dev:         task.dev        || "",
       demandante:  task.demandante || "",
       data_reg:    task.dataReg    || "",
       origem:      task.origem     || "manual",
       origem_id:   task.origemId   || "",
+      produto:     task.produto    || "Enterprise",
       updated_at:  new Date().toISOString(),
     };
   }
@@ -359,6 +361,51 @@ class SupabaseDataProvider {
     const { error } = await this._client
       .from("releases").delete().eq("id", id);
     if (error) throw new Error("deleteRelease: " + error.message);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // APONTAMENTO DE HORAS (TIME ENTRIES)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  _normalizeTimeEntry(row) {
+    return {
+      id:     row.id,
+      taskId: row.task_id,
+      dev:    row.dev    || "",
+      data:   row.data   || "",
+      horas:  parseFloat(row.horas) || 0,
+    };
+  }
+
+  async getAllTimeEntries() {
+    if (!this._ready) return [];
+    const { data, error } = await this._client
+      .from("time_entries").select("*").order("data");
+    if (error) { console.error("getAllTimeEntries:", error.message); return []; }
+    return data.map((r) => this._normalizeTimeEntry(r));
+  }
+
+  async getTimeEntriesForTask(taskId) {
+    if (!this._ready) return [];
+    const { data, error } = await this._client
+      .from("time_entries").select("*").eq("task_id", taskId).order("data");
+    if (error) { console.error("getTimeEntriesForTask:", error.message); return []; }
+    return data.map((r) => this._normalizeTimeEntry(r));
+  }
+
+  async saveTimeEntry(entry) {
+    if (!this._ready) return { ...entry, id: Date.now() };
+    const row = { task_id: entry.taskId, dev: entry.dev || "", data: entry.data, horas: entry.horas };
+    const { data, error } = await this._client
+      .from("time_entries").insert(row).select().single();
+    if (error) throw new Error("saveTimeEntry: " + error.message);
+    return this._normalizeTimeEntry(data);
+  }
+
+  async deleteTimeEntry(id) {
+    if (!this._ready) return;
+    const { error } = await this._client.from("time_entries").delete().eq("id", id);
+    if (error) throw new Error("deleteTimeEntry: " + error.message);
   }
 
   // ─────────────────────────────────────────────────────────────────────────

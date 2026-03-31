@@ -18,15 +18,19 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   descricao    TEXT    DEFAULT '',
   release      TEXT    DEFAULT '',
   prioridade   TEXT    DEFAULT 'Média',
-  status       TEXT    DEFAULT 'Planejado',
+  status       TEXT    DEFAULT 'Pendente',
   dev          TEXT    DEFAULT '',
   demandante   TEXT    DEFAULT '',
   data_reg     TEXT    DEFAULT '',
   origem       TEXT    DEFAULT 'manual',
   origem_id    TEXT    DEFAULT '',
+  produto      TEXT    DEFAULT 'Enterprise',
   created_at   TIMESTAMPTZ DEFAULT NOW(),
   updated_at   TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migração segura: adiciona coluna produto se não existir
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS produto TEXT DEFAULT 'Enterprise';
 
 CREATE INDEX IF NOT EXISTS idx_tasks_status    ON public.tasks (status);
 CREATE INDEX IF NOT EXISTS idx_tasks_dev       ON public.tasks (dev);
@@ -93,6 +97,29 @@ CREATE TABLE IF NOT EXISTS public.releases (
   status      TEXT DEFAULT 'Planejado',
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- TABELA: time_entries
+-- Apontamento de horas utilizadas por task.
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.time_entries (
+  id         SERIAL PRIMARY KEY,
+  task_id    BIGINT NOT NULL,
+  dev        TEXT DEFAULT '',
+  data       TEXT DEFAULT '',   -- dd/mm/yyyy
+  horas      NUMERIC(5,1) DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_te_task_id  ON public.time_entries (task_id);
+CREATE INDEX IF NOT EXISTS idx_te_data     ON public.time_entries (data);
+
+DROP POLICY IF EXISTS "allow_all_time_entries" ON public.time_entries;
+ALTER TABLE public.time_entries ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_all_time_entries"
+  ON public.time_entries FOR ALL TO anon, authenticated
+  USING (true) WITH CHECK (true);
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -205,18 +232,18 @@ ON CONFLICT (id) DO UPDATE SET
 -- ═══════════════════════════════════════════════════════════════════════════
 
 INSERT INTO public.tasks
-  (id, ticket_orc, horas_dev, horas_qa, tipo, classif, modulo, cliente, descricao, release, prioridade, status, dev, demandante, data_reg, origem, origem_id)
+  (id, ticket_orc, horas_dev, horas_qa, tipo, classif, modulo, cliente, descricao, release, prioridade, status, dev, demandante, data_reg, origem, origem_id, produto)
 VALUES
-  (90203,  '84211',  80,  40, 'NOVA FEATURE',    'Evolução',    'Contencioso', 'ELAW INTERNO',        'Nova Feature - Ajustes Indice Variation',              '7.12.0', 'Baixa', 'Concluído',                'Alexandre', 'Vinicius Bavaroti', '18/02/2025', 'manual', ''),
-  (100855, '93046',  40,  32, 'NOVA FEATURE',    'Evolução',    'Contencioso', 'MOTO HONDA',          '[Evolução] Restrições Divisão do Jurídico - Honda',    '7.10.0', 'Alta',  'Concluído',                'Alexandre', 'Otávio Assis',      '17/04/2025', 'manual', ''),
-  (118282, '100850', 40,  32, 'NOVA FEATURE',    'Customização','Contencioso', 'PORTO SEGURO',        'Implementar filtro de Sub-Ramo em fluxos',             '7.10.0', 'Alta',  'Concluído',                'Alexandre', 'Vanessa Oliveira',  '28/07/2025', 'manual', ''),
-  (136529, 'N/A',   120,  40, 'NOVA FEATURE',    'Evolução',    'Societário',  'ANIMA HOLDING S.A.',  'INTEGRAÇÃO DE ASSINATURA NO MODULO SOCIETÁRIO',       '7.12.0', 'Alta',  'Concluído',                'Bruno',     'Otávio Assis',      '01/11/2025', 'manual', ''),
-  (140548, 'N/A',    0,    0, 'NOVA FEATURE',    'Evolução',    'Geral',       'ELAW INTERNO',        'Correção de performance - otimização de carregamento', '7.1.18', 'Alta',  'Planejado',                'Marini',    'Felipe Beltrão',    '10/12/2025', 'manual', ''),
-  (144534, 'N/A',    4,    4, 'NOVA FEATURE',    'Evolução',    'Geral',       'PEPSICO',             'Inclusão do status da filial no dicionário',           '7.14.0', 'Baixa', 'Planejado',                'Alexandre', 'Vanessa Oliveira',  '13/01/2026', 'manual', ''),
-  (146619, 'N/A',    5,    8, 'NOVA FEATURE',    'Evolução',    'Contencioso', 'PORTO SEGURO',        'Bloqueio para datas retroativas em prazo avulso',      '7.14.0', 'Baixa', 'Em Desenvolvimento',       'Alexandre', 'Otávio Assis',      '22/01/2026', 'manual', ''),
-  (147200, 'N/A',   24,   16, 'DÉBITO TÉCNICO',  'Evolução',    'Societário',  'ANIMA HOLDING S.A.',  'Ajuste de performance na tela de atos societários',    '7.14.0', 'Alta',  'Em Homologação - QA',      'Lucas',     'Lucas Frias',       '10/02/2026', 'manual', ''),
-  (148005, 'N/A',   16,    8, 'VULNERABILIDADE', 'Evolução',    'Geral',       'ELAW INTERNO',        'Correção de XSS em campos de texto livre',             '7.14.0', 'Alta',  'Em Homologação - Cliente', 'Leandro',   'Felipe Beltrão',    '15/02/2026', 'manual', ''),
-  (148912, 'N/A',   32,   16, 'NOVA FEATURE',    'Customização','E-Billing',   'SCANIA LATIN AMERICA','Configuração de regras de faturamento por área',       '7.16.0', 'Alta',  'Planejado',                'Michael',   'Vanessa Oliveira',  '01/03/2026', 'manual', '')
+  (90203,  '84211',  80,  40, 'NOVA FEATURE',    'Evolução',    'Contencioso', 'ELAW INTERNO',        'Nova Feature - Ajustes Indice Variation',              '7.12.0', 'Baixa', 'Concluído',                'Alexandre', 'Vinicius Bavaroti', '18/02/2025', 'manual', '', 'Enterprise'),
+  (100855, '93046',  40,  32, 'NOVA FEATURE',    'Evolução',    'Contencioso', 'MOTO HONDA',          '[Evolução] Restrições Divisão do Jurídico - Honda',    '7.10.0', 'Alta',  'Concluído',                'Alexandre', 'Otávio Assis',      '17/04/2025', 'manual', '', 'Enterprise'),
+  (118282, '100850', 40,  32, 'NOVA FEATURE',    'Customização','Contencioso', 'PORTO SEGURO',        'Implementar filtro de Sub-Ramo em fluxos',             '7.10.0', 'Alta',  'Concluído',                'Alexandre', 'Vanessa Oliveira',  '28/07/2025', 'manual', '', 'Enterprise'),
+  (136529, 'N/A',   120,  40, 'NOVA FEATURE',    'Evolução',    'Societário',  'ANIMA HOLDING S.A.',  'INTEGRAÇÃO DE ASSINATURA NO MODULO SOCIETÁRIO',       '7.12.0', 'Alta',  'Concluído',                'Bruno',     'Otávio Assis',      '01/11/2025', 'manual', '', 'Enterprise'),
+  (140548, 'N/A',    0,    0, 'NOVA FEATURE',    'Evolução',    'Geral',       'ELAW INTERNO',        'Correção de performance - otimização de carregamento', '7.1.18', 'Alta',  'Planejado',                'Marini',    'Felipe Beltrão',    '10/12/2025', 'manual', '', 'CLM'),
+  (144534, 'N/A',    4,    4, 'NOVA FEATURE',    'Evolução',    'Geral',       'PEPSICO',             'Inclusão do status da filial no dicionário',           '7.14.0', 'Baixa', 'Planejado',                'Alexandre', 'Vanessa Oliveira',  '13/01/2026', 'manual', '', 'Enterprise'),
+  (146619, 'N/A',    5,    8, 'NOVA FEATURE',    'Evolução',    'Contencioso', 'PORTO SEGURO',        'Bloqueio para datas retroativas em prazo avulso',      '7.14.0', 'Baixa', 'Em Desenvolvimento',       'Alexandre', 'Otávio Assis',      '22/01/2026', 'manual', '', 'Enterprise'),
+  (147200, 'N/A',   24,   16, 'DÉBITO TÉCNICO',  'Evolução',    'Societário',  'ANIMA HOLDING S.A.',  'Ajuste de performance na tela de atos societários',    '7.14.0', 'Alta',  'Em Homologação - QA',      'Lucas',     'Lucas Frias',       '10/02/2026', 'manual', '', 'Enterprise'),
+  (148005, 'N/A',   16,    8, 'VULNERABILIDADE', 'Evolução',    'Geral',       'ELAW INTERNO',        'Correção de XSS em campos de texto livre',             '7.14.0', 'Alta',  'Em Homologação - Cliente', 'Leandro',   'Felipe Beltrão',    '15/02/2026', 'manual', '', 'Enterprise'),
+  (148912, 'N/A',   32,   16, 'NOVA FEATURE',    'Customização','E-Billing',   'SCANIA LATIN AMERICA','Configuração de regras de faturamento por área',       '7.16.0', 'Alta',  'Planejado',                'Michael',   'Vanessa Oliveira',  '01/03/2026', 'manual', '', 'Enterprise')
 ON CONFLICT (id) DO NOTHING;
 
 
